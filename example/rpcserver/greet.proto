@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package pb;
+
+option go_package="./model";
+
+message SayHelloReq {
+  string name = 1;
+}
+
+message SayHelloResp {
+  string Message = 1;
+}
+
+service GreetObj {
+  rpc SayHello(SayHelloReq) returns (SayHelloResp);
+}

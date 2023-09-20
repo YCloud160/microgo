@@ -1,0 +1,7 @@
+app-listen: :51675
+server:
+  - name: demo.rpcServer
+    ip: 127.0.0.1
+    port: 8080
+client:
+  request-timeout: 3000

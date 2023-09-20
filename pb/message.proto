@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package pb;
+
+option go_package="./pb";
+
+message Message {
+  uint32 request_id = 1;
+  string obj = 2;
+  string method = 3;
+  map<string, string> meta = 4;
+  bytes body = 5;
+  int32 code = 6;
+  string desc = 7;
+}
