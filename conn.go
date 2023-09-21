@@ -34,6 +34,7 @@ type conn struct {
 	readBuf    []byte
 	headBuf    []byte
 	lastErr    error
+	ip         string
 }
 
 func newConn(rw net.Conn, msgCh chan *ReadData, removeCh chan *conn) *conn {
@@ -42,6 +43,8 @@ func newConn(rw net.Conn, msgCh chan *ReadData, removeCh chan *conn) *conn {
 		readBuf: make([]byte, defaultReadBufSize),
 		headBuf: make([]byte, defaultHeadSize),
 	}
+	ip := net.ParseIP(rw.RemoteAddr().String())
+	c.ip = ip.String()
 
 	c.getReadBuf = func(size int32) []byte {
 		if size <= int32(len(c.readBuf)) {

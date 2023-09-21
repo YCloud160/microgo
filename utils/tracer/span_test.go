@@ -1,9 +1,15 @@
-/**
-* @CopyRight: 广州仰望星空云科技有限公司
-* @Author: yaoliuling
-* @Email: yaoliuling@xinyu668.com
-* @CreateTime: 2023/9/21 19:46
-* @Description: 请写描述
- */
-
 package tracer
+
+import (
+	"encoding/json"
+	"testing"
+)
+
+func TestNewSpan(t *testing.T) {
+	span := NewRootSpan("test1")
+	span = NewSpan(span, "test2")
+	span = NewSpan(span, "test3")
+	t.Log(span.SpanID())
+	bs, _ := json.Marshal(span)
+	t.Log(string(bs))
+}

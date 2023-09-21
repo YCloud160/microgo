@@ -15,8 +15,10 @@ var (
 )
 
 type Config struct {
+	Service    string          `yaml:"service"`
 	AppListen  string          `yaml:"app-listen"`
 	KeepAlive  int             `yaml:"keep-alive"`
+	LogLevel   string          `yaml:"log-level"`
 	ServerConf []*ServerConfig `yaml:"server"`
 	ClientConf *ClientConfig   `yaml:"client"`
 }

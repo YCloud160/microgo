@@ -47,9 +47,13 @@ func WithWriter(writers ...io.Writer) LogOption {
 	}
 }
 
-func WithLevel(level Level) LogOption {
+func WithLevel(level string) LogOption {
 	return func(fd *logFD) {
-		fd.level = level
+		level = strings.ToLower(level)
+		lev, ok := LevelName[level]
+		if ok {
+			fd.level = lev
+		}
 	}
 }
 
@@ -98,7 +102,7 @@ func write(ctx context.Context, level Level, msg string, fields ...*Entry) {
 		return
 	}
 	entry := make([]*Entry, 0, len(fields)+len(fd.fields)+10)
-	entry = append(entry, timeField(), levelField(level), caller(), Field("msg", msg))
+	entry = append(entry, timeField(), levelField(level), caller())
 
 	if fd.ctxWrite != nil {
 		ctxFields := fd.ctxWrite(ctx)
@@ -109,6 +113,7 @@ func write(ctx context.Context, level Level, msg string, fields ...*Entry) {
 	if len(fd.fields) > 0 {
 		entry = append(entry, fd.fields...)
 	}
+	entry = append(entry, Field("msg", msg))
 	entry = append(entry, fields...)
 	if level == FATAL {
 		entry = append(entry, Field("stack", stack()))

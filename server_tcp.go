@@ -5,6 +5,8 @@ import (
 	"github.com/YCloud160/microgo/config"
 	ierrors "github.com/YCloud160/microgo/errors"
 	"github.com/YCloud160/microgo/meta"
+	"github.com/YCloud160/microgo/utils/header"
+	"github.com/YCloud160/microgo/utils/tracer"
 	"github.com/YCloud160/microgo/utils/xlog"
 	"net"
 	"sync"
@@ -24,6 +26,7 @@ type ServerTCP struct {
 	conns  map[*conn]struct{}
 
 	msgCh    chan *ReadData
+	tick     chan struct{}
 	removeCh chan *conn
 	stopCh   chan struct{}
 
@@ -41,7 +44,8 @@ func NewTCPServer(name string, impl any, call Call) Server {
 		removeCh: make(chan *conn, 10),
 		stopCh:   make(chan struct{}),
 	}
-	srv.msgCh = make(chan *ReadData, srv.conf.MaxInvoke)
+	srv.msgCh = make(chan *ReadData, srv.conf.MaxInvoke/3)
+	srv.tick = make(chan struct{}, srv.conf.MaxInvoke)
 	return srv
 }
 
@@ -142,7 +146,7 @@ type outChan struct {
 }
 
 func (srv *ServerTCP) invoke(conn *conn, req *Message) {
-	ctx := meta.NewOutContext(context.TODO(), req.Data.Meta)
+	ctx := context.TODO()
 	var cancel context.CancelFunc
 	if srv.conf.InvokeTimeout > 0 {
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(srv.conf.InvokeTimeout)*time.Millisecond)
@@ -154,6 +158,27 @@ func (srv *ServerTCP) invoke(conn *conn, req *Message) {
 	resp.ContentType = defaultContentType
 	resp.Data.RequestId = req.Data.RequestId
 
+	select {
+	case <-ctx.Done():
+		resp.Data.Code = 9999
+		resp.Data.Desc = "request timeout"
+		conn.sendMessage(resp)
+		putMessage(resp)
+		return
+	case srv.tick <- struct{}{}:
+	}
+	defer func() {
+		<-srv.tick
+	}()
+
+	ctxData := req.Data.Meta
+	if ctxData == nil {
+		ctxData = make(map[string]string)
+	}
+	ctxData[header.RemoteIP] = conn.ip
+	ctx, ctxData = setTrace(ctx, ctxData, req.Data.Method)
+	ctx = meta.NewOutContext(ctx, ctxData)
+
 	var (
 		respData *outChan
 		ok       bool
@@ -161,13 +186,9 @@ func (srv *ServerTCP) invoke(conn *conn, req *Message) {
 	)
 
 	go func() {
+		defer xlog.Recover(ctx)
 		out, err := srv.call(ctx, srv.impl, req.Data.Method, req.Data.Body)
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			respCh <- &outChan{data: out, err: err}
-		}
+		respCh <- &outChan{data: out, err: err}
 	}()
 
 	select {
@@ -200,4 +221,26 @@ func (srv *ServerTCP) invoke(conn *conn, req *Message) {
 	}
 	conn.sendMessage(resp)
 	putMessage(resp)
+}
+
+func setTrace(ctx context.Context, ctxData map[string]string, name string) (context.Context, map[string]string) {
+	isSetTracer := false
+	if traceData, ok := ctxData[header.Tracer]; ok {
+		trace := tracer.ParseTrace(traceData)
+		if trace != nil {
+			isSetTracer = true
+			ctx = tracer.WithTracer(ctx, trace, name)
+			ctxData[header.TraceID] = trace.TraceID()
+			ctxData[header.SpanID] = trace.SpanID()
+		}
+	}
+	if isSetTracer == false {
+		tracerCtx, trace := tracer.WithNewTracer(ctx, name)
+		ctx = tracerCtx
+		if trace != nil {
+			ctxData[header.TraceID] = trace.TraceID()
+			ctxData[header.SpanID] = trace.SpanID()
+		}
+	}
+	return ctx, ctxData
 }
