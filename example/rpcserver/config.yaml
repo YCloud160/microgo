@@ -1,3 +1,4 @@
+service: demo
 app-listen: :51675
 server:
   - name: demo.rpcServer
