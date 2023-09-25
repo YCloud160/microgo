@@ -8,6 +8,8 @@ import (
 	"github.com/YCloud160/microgo/utils/header"
 	"github.com/YCloud160/microgo/utils/tracer"
 	"github.com/YCloud160/microgo/utils/xlog"
+	"go.uber.org/zap"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -25,10 +27,7 @@ type ServerTCP struct {
 	listen net.Listener
 	conns  map[*conn]struct{}
 
-	msgCh    chan *ReadData
-	tick     chan struct{}
-	removeCh chan *conn
-	stopCh   chan struct{}
+	tick chan struct{}
 
 	impl any
 	call Call
@@ -36,15 +35,12 @@ type ServerTCP struct {
 
 func NewTCPServer(name string, impl any, call Call) Server {
 	srv := &ServerTCP{
-		name:     name,
-		conf:     config.GetServerConfig(name),
-		conns:    make(map[*conn]struct{}),
-		impl:     impl,
-		call:     call,
-		removeCh: make(chan *conn, 10),
-		stopCh:   make(chan struct{}),
+		name:  name,
+		conf:  config.GetServerConfig(name),
+		conns: make(map[*conn]struct{}),
+		impl:  impl,
+		call:  call,
 	}
-	srv.msgCh = make(chan *ReadData, srv.conf.MaxInvoke/3)
 	srv.tick = make(chan struct{}, srv.conf.MaxInvoke)
 	return srv
 }
@@ -56,7 +52,7 @@ func (srv *ServerTCP) Start() error {
 		return err
 	}
 	startWaitGroup.Done()
-	xlog.Info(context.TODO(), "start tcp server", xlog.Field("server", srv.Name()), xlog.Field("listen", srv.conf.Port))
+	xlog.Info(context.TODO(), "start tcp server", zap.String("server", srv.Name()), zap.String("listen", srv.conf.Port))
 	srv.listen = listen
 	return srv.accept()
 }
@@ -71,10 +67,7 @@ func (srv *ServerTCP) Stop() error {
 	}
 	srv.mu.Unlock()
 
-	xlog.Info(context.TODO(), "stop tcp server", xlog.Field("server", srv.Name()))
-
-	srv.stopCh <- struct{}{}
-	<-srv.stopCh
+	xlog.Info(context.TODO(), "stop tcp server", zap.String("server", srv.Name()))
 	return nil
 }
 
@@ -85,7 +78,6 @@ func (srv *ServerTCP) Name() string {
 func (srv *ServerTCP) accept() error {
 	defer srv.Stop()
 
-	go srv.handle()
 	for {
 		rw, err := srv.listen.Accept()
 		if err != nil {
@@ -95,27 +87,31 @@ func (srv *ServerTCP) accept() error {
 			tcpConn.SetWriteBuffer(4096)
 			tcpConn.SetReadBuffer(4096)
 		}
-		c := newConn(rw, srv.msgCh, srv.removeCh)
+		c := newConn(rw)
 		srv.addConn(c)
+		go srv.handle(c)
 	}
 }
 
-func (srv *ServerTCP) handle() {
+func (srv *ServerTCP) handle(c *conn) {
+	defer xlog.Recover(context.TODO())
+	defer srv.removeConn(c)
+
 	for {
-		select {
-		case stop := <-srv.stopCh:
-			srv.stopCh <- stop
-			return
-		case data := <-srv.msgCh:
-			switch data.msg.Type {
-			case MessageType_Ping:
-			case MessageType_Data:
-				srv.invoke(data.conn, data.msg)
-			default:
-				return
+		msg, err := c.readMessage()
+		if err != nil {
+			if err != io.EOF {
+				xlog.Error(context.TODO(), "read message failed", zap.Error(err))
 			}
-		case c := <-srv.removeCh:
-			srv.removeConn(c)
+			return
+		}
+		switch msg.Type {
+		case MessageType_Ping:
+		case MessageType_Data:
+			srv.invoke(c, msg)
+		default:
+			xlog.Error(context.TODO(), "error message type", zap.Any("data type", msg.Type))
+			return
 		}
 	}
 }
@@ -178,6 +174,8 @@ func (srv *ServerTCP) invoke(conn *conn, req *Message) {
 	ctxData[header.RemoteIP] = conn.ip
 	ctx, ctxData = setTrace(ctx, ctxData, req.Data.Method)
 	ctx = meta.NewOutContext(ctx, ctxData)
+	contentType := ctxData[header.ContentType]
+	enc := GetEncoder(contentType)
 
 	var (
 		respData *outChan
@@ -187,7 +185,7 @@ func (srv *ServerTCP) invoke(conn *conn, req *Message) {
 
 	go func() {
 		defer xlog.Recover(ctx)
-		out, err := srv.call(ctx, srv.impl, req.Data.Method, req.Data.Body)
+		out, err := srv.call(ctx, srv.impl, enc, req.Data.Method, req.Data.Body)
 		respCh <- &outChan{data: out, err: err}
 	}()
 

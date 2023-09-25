@@ -19,6 +19,7 @@ type Config struct {
 	AppListen  string          `yaml:"app-listen"`
 	KeepAlive  int             `yaml:"keep-alive"`
 	LogLevel   string          `yaml:"log-level"`
+	LogPath    string          `yaml:"log-path"`
 	ServerConf []*ServerConfig `yaml:"server"`
 	ClientConf *ClientConfig   `yaml:"client"`
 }

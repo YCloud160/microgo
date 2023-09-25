@@ -8,4 +8,4 @@ type Server interface {
 	Name() string
 }
 
-type Call func(ctx context.Context, impl any, method string, input []byte) (output []byte, err error)
+type Call func(ctx context.Context, impl any, enc Encoder, method string, input []byte) (output []byte, err error)

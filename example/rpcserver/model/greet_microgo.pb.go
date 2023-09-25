@@ -24,20 +24,20 @@ func (*NopGreetObjServerImpl) SayHello(ctx context.Context, input *SayHelloReq) 
 }
 
 // GreetObjCall is used to call the implement of the defined method.
-func GreetObjCall(ctx context.Context, impl any, method string, input []byte) (out []byte, err error) {
+func GreetObjCall(ctx context.Context, impl any, enc microgo.Encoder, method string, input []byte) (out []byte, err error) {
 	obj := impl.(IGreetObjServer)
 	_ = obj
 	switch method {
 	case "SayHello":
 		var req SayHelloReq
-		if err = proto.Unmarshal(input, &req); err != nil {
+		if err = enc.Unmarshal(input, &req); err != nil {
 			return nil, err
 		}
 		resp, err := obj.SayHello(ctx, &req)
 		if err != nil {
 			return nil, err
 		}
-		out, err = proto.Marshal(resp)
+		out, err = enc.Marshal(resp)
 		if err != nil {
 			return nil, err
 		}

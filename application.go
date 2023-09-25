@@ -3,10 +3,8 @@ package microgo
 import (
 	"context"
 	"github.com/YCloud160/microgo/config"
-	"github.com/YCloud160/microgo/meta"
-	"github.com/YCloud160/microgo/utils/header"
 	"github.com/YCloud160/microgo/utils/xlog"
-	"os"
+	"go.uber.org/zap"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,28 +21,7 @@ var (
 
 func init() {
 	conf := config.GetConfig()
-	xlog.InitXlog(
-		xlog.WithField(
-			xlog.Field("pid", os.Getpid()),
-			xlog.Field("service", conf.Service),
-		),
-		xlog.WithLevel(conf.LogLevel),
-		xlog.WithContextWrite(func(ctx context.Context) []*xlog.Entry {
-			data, ok := meta.FromOutContext(ctx)
-			if !ok {
-				return nil
-			}
-			var fields []*xlog.Entry
-			traceId := data[header.TraceID]
-			if len(traceId) > 0 {
-				fields = append(fields, xlog.Field("traceId", traceId))
-			}
-			spanId := data[header.SpanID]
-			if len(spanId) > 0 {
-				fields = append(fields, xlog.Field("spanId", spanId))
-			}
-			return fields
-		}))
+	xlog.InitXlog(conf)
 }
 
 func RegisterServer(servers ...Server) {
@@ -60,7 +37,7 @@ func Run() error {
 		startWaitGroup.Add(1)
 		go func(server Server) {
 			if err := server.Start(); err != nil {
-				xlog.Error(context.TODO(), "server start failed", xlog.Field("server", server.Name()), xlog.Field("error", err))
+				xlog.Error(context.TODO(), "server start failed", zap.String("server", server.Name()), zap.Error(err))
 			}
 		}(server)
 	}
@@ -76,7 +53,7 @@ func loop() error {
 		select {
 		case <-tick.C:
 			for _, srv := range serverMap {
-				xlog.Info(context.TODO(), "keepAlive", xlog.Field("server", srv.Name()))
+				xlog.Info(context.TODO(), "keepAlive", zap.String("server", srv.Name()))
 			}
 		case <-stopCh:
 			for _, srv := range serverMap {

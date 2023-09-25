@@ -42,7 +42,6 @@ type Client struct {
 	idx   int
 	hosts []string
 	pool  map[string]*clientConnPool
-	msgCh chan *ReadData
 	reqCh sync.Map
 }
 
@@ -52,27 +51,20 @@ func NewClient(name string, options ...ClientOption) *Client {
 		conf:  config.GetClientConfig(),
 		hosts: make([]string, 0),
 		pool:  make(map[string]*clientConnPool),
-		msgCh: make(chan *ReadData, defaultReadCh),
 	}
 
 	for _, option := range options {
 		option(client)
 	}
 
-	go client.handle()
 	return client
 }
 
-func (client *Client) handle() {
-	for {
-		select {
-		case msg := <-client.msgCh:
-			val, ok := client.reqCh.Load(msg.msg.Data.RequestId)
-			if ok {
-				if reqCh, reqOk := val.(chan *Message); reqOk {
-					reqCh <- msg.msg
-				}
-			}
+func (client *Client) handle(msg *Message) {
+	val, ok := client.reqCh.Load(msg.Data.RequestId)
+	if ok {
+		if reqCh, reqOk := val.(chan *Message); reqOk {
+			reqCh <- msg
 		}
 	}
 }

@@ -2,139 +2,111 @@ package xlog
 
 import (
 	"context"
-	"io"
+	"github.com/YCloud160/microgo/config"
+	"github.com/YCloud160/microgo/meta"
+	"github.com/YCloud160/microgo/utils/header"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 	"os"
 	"runtime"
-	"strings"
+	"time"
 )
 
-type Logger interface {
-	Debug(msg string, fields ...*Entry)
-	Info(msg string, fields ...*Entry)
-	Warn(msg string, fields ...*Entry)
-	Error(msg string, fields ...*Entry)
-	Fatal(msg string, fields ...*Entry)
-}
+var (
+	logFd *zap.Logger
+	level zap.AtomicLevel
+)
 
-type LogOption func(fd *logFD)
-
-type logFD struct {
-	level    Level
-	writers  []io.Writer
-	fields   []*Entry
-	ctxWrite func(ctx context.Context) []*Entry
-}
-
-var fd *logFD
-
-func init() {
-	fd = &logFD{
-		writers: []io.Writer{os.Stdout},
-		level:   INFO,
-		fields:  make([]*Entry, 0),
+func InitXlog(conf *config.Config) {
+	writers := []zapcore.WriteSyncer{os.Stderr}
+	output := zapcore.NewMultiWriteSyncer(writers...)
+	if len(conf.LogPath) != 0 {
+		output = zapcore.AddSync(&lumberjack.Logger{
+			Filename: conf.LogPath,
+			MaxSize:  500, // megabytes
+			MaxAge:   5,   // days
+		})
+	}
+	encodeConf := zap.NewProductionEncoderConfig()
+	encodeConf.TimeKey = "timestamp"
+	encodeConf.EncodeTime = func(t time.Time, encoder zapcore.PrimitiveArrayEncoder) {
+		encoder.AppendString(t.Format("2006-01-02 15:04:05.000"))
+	}
+	encoder := zapcore.NewJSONEncoder(encodeConf)
+	level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
+	core := zapcore.NewCore(encoder, output, level)
+	logFd = zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.DPanicLevel))
+	logFd = logFd.With(zap.Int("pid", os.Getpid()))
+	if len(conf.Service) > 0 {
+		logFd = logFd.With(zap.String("service", conf.Service))
 	}
 }
 
-func InitXlog(options ...LogOption) {
-	for _, opt := range options {
-		opt(fd)
-	}
+func Debug(ctx context.Context, msg string, fields ...zap.Field) {
+	write(ctx, zapcore.DebugLevel, msg, fields...)
 }
 
-func WithWriter(writers ...io.Writer) LogOption {
-	return func(fd *logFD) {
-		fd.writers = writers
-	}
+func Info(ctx context.Context, msg string, fields ...zap.Field) {
+	write(ctx, zapcore.InfoLevel, msg, fields...)
 }
 
-func WithLevel(level string) LogOption {
-	return func(fd *logFD) {
-		level = strings.ToLower(level)
-		lev, ok := LevelName[level]
-		if ok {
-			fd.level = lev
-		}
-	}
+func Warn(ctx context.Context, msg string, fields ...zap.Field) {
+	write(ctx, zapcore.WarnLevel, msg, fields...)
 }
 
-func WithField(fields ...*Entry) LogOption {
-	return func(fd *logFD) {
-		fd.fields = append(fd.fields, fields...)
-	}
+func Error(ctx context.Context, msg string, fields ...zap.Field) {
+	write(ctx, zapcore.ErrorLevel, msg, fields...)
 }
 
-func WithContextWrite(f func(ctx context.Context) []*Entry) LogOption {
-	return func(fd *logFD) {
-		fd.ctxWrite = f
-	}
+func DPanic(ctx context.Context, msg string, fields ...zap.Field) {
+	write(ctx, zapcore.DPanicLevel, msg, fields...)
 }
 
-func Debug(ctx context.Context, msg string, fields ...*Entry) {
-	write(ctx, DEBUG, msg, fields...)
+func Panic(ctx context.Context, msg string, fields ...zap.Field) {
+	write(ctx, zapcore.PanicLevel, msg, fields...)
 }
 
-func Info(ctx context.Context, msg string, fields ...*Entry) {
-	write(ctx, INFO, msg, fields...)
+func Fatal(ctx context.Context, msg string, fields ...zap.Field) {
+	write(ctx, zapcore.FatalLevel, msg, fields...)
 }
 
-func Warn(ctx context.Context, msg string, fields ...*Entry) {
-	write(ctx, WARN, msg, fields...)
-}
+//func SetLevel(level string) {
+//	lowerLevel := strings.ToLower(level)
+//	l, ok := LevelName[lowerLevel]
+//	if ok {
+//		fd.level = l
+//	}
+//}
 
-func Error(ctx context.Context, msg string, fields ...*Entry) {
-	write(ctx, ERROR, msg, fields...)
-}
-
-func Fatal(ctx context.Context, msg string, fields ...*Entry) {
-	write(ctx, FATAL, msg, fields...)
-}
-
-func SetLevel(level string) {
-	lowerLevel := strings.ToLower(level)
-	l, ok := LevelName[lowerLevel]
-	if ok {
-		fd.level = l
-	}
-}
-
-func write(ctx context.Context, level Level, msg string, fields ...*Entry) {
-	if fd.level > level {
-		return
-	}
-	entry := make([]*Entry, 0, len(fields)+len(fd.fields)+10)
-	entry = append(entry, timeField(), levelField(level), caller())
-
-	if fd.ctxWrite != nil {
-		ctxFields := fd.ctxWrite(ctx)
-		if len(ctxFields) > 0 {
-			entry = append(entry, ctxFields...)
-		}
-	}
-	if len(fd.fields) > 0 {
-		entry = append(entry, fd.fields...)
-	}
-	entry = append(entry, Field("msg", msg))
-	entry = append(entry, fields...)
-	if level == FATAL {
-		entry = append(entry, Field("stack", stack()))
-	}
-
-	logMessage := EncodeJson(entry...)
-	for _, w := range fd.writers {
-		w.Write([]byte(logMessage + "\n"))
-	}
-	if level == FATAL {
-		os.Exit(0)
-	}
+func write(ctx context.Context, level zapcore.Level, msg string, fields ...zap.Field) {
+	fields = withContext(ctx, fields...)
+	logFd.Log(level, msg, fields...)
 }
 
 func Recover(ctx context.Context) {
 	if err := recover(); err != nil {
-		Error(ctx, "recover panic", Field("error", err), Field("stack", stack()))
+		DPanic(ctx, "recover panic", zap.Any("error", err), zap.Any("stack", stack()))
 	}
 }
 
 func stack() string {
 	var buf [2 << 10]byte
 	return string(buf[:runtime.Stack(buf[:], false)])
+}
+
+func withContext(ctx context.Context, fields ...zap.Field) []zap.Field {
+	data, ok := meta.FromOutContext(ctx)
+	if !ok {
+		return fields
+	}
+	traceId := data[header.TraceID]
+	if len(traceId) > 0 {
+		fields = append(fields, zap.String("traceId", traceId))
+	}
+	spanId := data[header.SpanID]
+	if len(spanId) > 0 {
+		fields = append(fields, zap.String("spanId", spanId))
+	}
+	return fields
 }

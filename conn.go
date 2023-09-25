@@ -1,21 +1,25 @@
 package microgo
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/YCloud160/microgo/utils/xlog"
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 	"io"
 	"net"
 	"runtime"
 	"sync"
+	"sync/atomic"
 )
 
 const (
 	defaultReadBufSize = 4096
-	defaultHeadSize    = 5
+	defaultHeadSize    = 6
 
-	messageType = 0xF0
-	contentType = 0x0F
+	fullPrefix4Bit = 0xF0
+	fullSuffix4Bit = 0x0F
 
 	maxBodyLen = 1<<31 - 1 - defaultHeadSize
 )
@@ -35,9 +39,10 @@ type conn struct {
 	headBuf    []byte
 	lastErr    error
 	ip         string
+	isClosed   atomic.Bool
 }
 
-func newConn(rw net.Conn, msgCh chan *ReadData, removeCh chan *conn) *conn {
+func newConn(rw net.Conn) *conn {
 	c := &conn{
 		rw:      rw,
 		readBuf: make([]byte, defaultReadBufSize),
@@ -53,31 +58,13 @@ func newConn(rw net.Conn, msgCh chan *ReadData, removeCh chan *conn) *conn {
 		c.readBuf = make([]byte, size)
 		return c.readBuf[:]
 	}
-	go c.read(msgCh, removeCh)
 	return c
 }
 
 func (conn *conn) Close() error {
+	conn.isClosed.Store(true)
 	conn.rw.Close()
 	return nil
-}
-
-func (conn *conn) read(msgCh chan *ReadData, removeCh chan *conn) {
-	defer func() {
-		conn.Close()
-		removeCh <- conn
-	}()
-
-	for {
-		msg, err := conn.readMessage()
-		if err != nil {
-			return
-		}
-		msgCh <- &ReadData{
-			msg:  msg,
-			conn: conn,
-		}
-	}
 }
 
 func (conn *conn) readMessage() (*Message, error) {
@@ -88,8 +75,9 @@ func (conn *conn) readMessage() (*Message, error) {
 	}
 	msg := getMessage()
 	msg.BodyLen = int32(headBuf[0]) | int32(headBuf[1])<<8 | int32(headBuf[2])<<16 | int32(headBuf[3])<<24
-	msg.Type = MessageType(headBuf[4]&messageType) >> 4
-	msg.ContentType = MessageContentType(headBuf[4]) & contentType
+	msg.Type = MessageType(headBuf[4] & fullPrefix4Bit)
+	msg.ContentType = MessageContentType(headBuf[4]) & fullSuffix4Bit
+	msg.CompressType = CompressType(headBuf[5]) & fullPrefix4Bit
 
 	bodyBuf := conn.getReadBuf(msg.BodyLen)
 	_, err = io.ReadFull(conn.rw, bodyBuf)
@@ -130,14 +118,14 @@ func (conn *conn) sendMessage(msg *Message) (err error) {
 	if bodyLen > maxBodyLen {
 		return ErrFullBodyLen
 	}
-
 	body := make([]byte, bodyLen+defaultHeadSize)
 	body[0] = byte(bodyLen)
 	body[1] = byte(bodyLen >> 8)
 	body[2] = byte(bodyLen >> 16)
 	body[3] = byte(bodyLen >> 24)
-	body[4] = (byte(msg.Type)<<4)&messageType | byte(msg.ContentType)&contentType
-	copy(body[5:], dataBytes)
+	body[4] = byte(msg.Type)&fullPrefix4Bit | byte(msg.ContentType)&fullSuffix4Bit
+	body[5] = byte(msg.CompressType) & fullPrefix4Bit
+	copy(body[6:], dataBytes)
 
 	_, err = conn.rw.Write(body)
 
@@ -152,7 +140,6 @@ type clientConnPool struct {
 	poolSize  int
 	index     int
 	idleConns []*conn
-	removeCh  chan *conn
 }
 
 func newClientConnPool(client *Client, addr string, size int) *clientConnPool {
@@ -160,7 +147,6 @@ func newClientConnPool(client *Client, addr string, size int) *clientConnPool {
 		client:   client,
 		addr:     addr,
 		poolSize: size,
-		removeCh: make(chan *conn, 10),
 	}
 	p.dial = func(addr string) (net.Conn, error) {
 		return net.Dial("tcp", addr)
@@ -169,7 +155,6 @@ func newClientConnPool(client *Client, addr string, size int) *clientConnPool {
 		p.poolSize = runtime.NumCPU()
 	}
 	p.idleConns = make([]*conn, 0, p.poolSize)
-	go p.listenRemove()
 	return p
 }
 
@@ -208,14 +193,44 @@ func (p *clientConnPool) tryGetConn() (*conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := newConn(rw, p.client.msgCh, p.removeCh)
+	c := newConn(rw)
 	p.index++
 	p.idleConns = append(p.idleConns, c)
+	go p.readMessage(c)
 	return c, nil
 }
 
-func (p *clientConnPool) listenRemove() {
-	for range p.removeCh {
-
+func (p *clientConnPool) readMessage(c *conn) {
+	defer p.removeConn(c)
+	for {
+		msg, err := c.readMessage()
+		if err != nil {
+			if err != io.EOF {
+				xlog.Error(context.TODO(), "client read message failed", zap.Error(err))
+			}
+			return
+		}
+		switch msg.Type {
+		case MessageType_Ping:
+		case MessageType_Data:
+			p.client.handle(msg)
+		default:
+			xlog.Error(context.TODO(), "error message type", zap.Any("data type", msg.Type))
+			return
+		}
 	}
+}
+
+func (p *clientConnPool) removeConn(c *conn) {
+	newConns := make([]*conn, 0, len(p.idleConns)-1)
+	p.mu.Lock()
+	for i := range p.idleConns {
+		ic := p.idleConns[i]
+		if ic == c {
+			continue
+		}
+		newConns = append(newConns, ic)
+	}
+	p.idleConns = newConns
+	p.mu.Unlock()
 }

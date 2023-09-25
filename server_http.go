@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/YCloud160/microgo/config"
 	"github.com/YCloud160/microgo/utils/xlog"
+	"go.uber.org/zap"
 	"net"
 	"net/http"
 )
@@ -35,13 +36,13 @@ func (srv *ServerHTTP) Start() error {
 		return err
 	}
 	startWaitGroup.Done()
-	xlog.Info(context.TODO(), "start http server", xlog.Field("server", srv.Name()), xlog.Field("listen", srv.conf.Port))
+	xlog.Info(context.TODO(), "start http server", zap.String("server", srv.Name()), zap.String("listen", srv.conf.Port))
 	return srv.httpServer.Serve(listen)
 }
 
 func (srv *ServerHTTP) Stop() error {
 	err := srv.httpServer.Close()
-	xlog.Info(context.TODO(), "stop http server", xlog.Field("server", srv.Name()))
+	xlog.Info(context.TODO(), "stop http server", zap.String("server", srv.Name()))
 	return err
 }
 

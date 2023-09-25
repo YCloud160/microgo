@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/YCloud160/microgo/config"
 	"github.com/YCloud160/microgo/utils/xlog"
+	"go.uber.org/zap"
 	"net"
 	"net/http"
 	"time"
@@ -27,9 +28,9 @@ func initAdminF() {
 		Handler: mux,
 	}
 	go func() {
-		xlog.Info(context.TODO(), "adminF start", xlog.Field("addr", listen.Addr()))
+		xlog.Info(context.TODO(), "adminF start", zap.Any("addr", listen.Addr()))
 		if err := adminFServer.Serve(listen); err != nil {
-			xlog.Error(context.TODO(), "adminF stop", xlog.Field("addr", listen.Addr()), xlog.Field("error", err))
+			xlog.Error(context.TODO(), "adminF stop", zap.Any("addr", listen.Addr()), zap.Error(err))
 		}
 	}()
 }

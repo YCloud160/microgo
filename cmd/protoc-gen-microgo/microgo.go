@@ -207,21 +207,21 @@ func (t *microgo) generateClientMethod(serviceName string, method *protogen.Meth
 func (t *microgo) generateMethod(service *protogen.Service) {
 	serviceName := upperFirstLatter(service.GoName)
 	t.P(fmt.Sprintf(`// %sCall is used to call the implement of the defined method.
-	func %sCall(ctx context.Context, impl any, method string, input []byte) (out []byte, err error) {
+	func %sCall(ctx context.Context, impl any, enc microgo.Encoder, method string, input []byte) (out []byte, err error) {
 		obj := impl.(I%sServer)
 		_ = obj
 		switch method {`, serviceName, serviceName, serviceName))
 	for _, method := range service.Methods {
 		t.P(fmt.Sprintf(`case "%s":
 			var req %s
-			if err = proto.Unmarshal(input, &req); err != nil {
+			if err = enc.Unmarshal(input, &req); err != nil {
 				return nil, err
 			}
 			resp, err := obj.%s(ctx, &req)
 			if err != nil {
 				return nil, err
 			}
-			out, err = proto.Marshal(resp)
+			out, err = enc.Marshal(resp)
 			if err != nil {
 				return nil, err
 			}`, method.GoName, t.gen.QualifiedGoIdent(method.Input.GoIdent), upperFirstLatter(method.GoName)))
