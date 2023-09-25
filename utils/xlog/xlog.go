@@ -36,7 +36,7 @@ func InitXlog(conf *config.Config) {
 	encoder := zapcore.NewJSONEncoder(encodeConf)
 	level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
 	core := zapcore.NewCore(encoder, output, level)
-	logFd = zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.DPanicLevel))
+	logFd = zap.New(core, zap.AddCaller(), zap.AddCallerSkip(2), zap.AddStacktrace(zapcore.DPanicLevel))
 	logFd = logFd.With(zap.Int("pid", os.Getpid()))
 	if len(conf.Service) > 0 {
 		logFd = logFd.With(zap.String("service", conf.Service))
