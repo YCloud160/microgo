@@ -18,7 +18,7 @@ const (
 	MessageContentType_Json  MessageContentType = 0x01
 	MessageContentType_Proto MessageContentType = 0x02
 
-	defaultContentType = MessageContentType_Json
+	defaultContentType = MessageContentType_Proto
 )
 
 type CompressType uint8

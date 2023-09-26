@@ -2,14 +2,16 @@ package xlog
 
 import (
 	"context"
+	"fmt"
 	"github.com/YCloud160/microgo/config"
 	"github.com/YCloud160/microgo/meta"
 	"github.com/YCloud160/microgo/utils/header"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
+	"math/rand"
 	"os"
-	"runtime"
+	"path/filepath"
 	"time"
 )
 
@@ -19,11 +21,16 @@ var (
 )
 
 func InitXlog(conf *config.Config) {
+	service := conf.Service
+	if len(service) == 0 {
+		service = fmt.Sprintf("%d", rand.Uint32()+1000)
+	}
 	writers := []zapcore.WriteSyncer{os.Stderr}
 	output := zapcore.NewMultiWriteSyncer(writers...)
 	if len(conf.LogPath) != 0 {
+		logFile := filepath.Join(conf.LogPath, service+".log")
 		output = zapcore.AddSync(&lumberjack.Logger{
-			Filename: conf.LogPath,
+			Filename: logFile,
 			MaxSize:  500, // megabytes
 			MaxAge:   5,   // days
 		})
@@ -86,13 +93,8 @@ func write(ctx context.Context, level zapcore.Level, msg string, fields ...zap.F
 
 func Recover(ctx context.Context) {
 	if err := recover(); err != nil {
-		DPanic(ctx, "recover panic", zap.Any("error", err), zap.Any("stack", stack()))
+		DPanic(ctx, "recover panic", zap.Any("error", err))
 	}
-}
-
-func stack() string {
-	var buf [2 << 10]byte
-	return string(buf[:runtime.Stack(buf[:], false)])
 }
 
 func withContext(ctx context.Context, fields ...zap.Field) []zap.Field {

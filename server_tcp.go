@@ -81,6 +81,10 @@ func (srv *ServerTCP) accept() error {
 	for {
 		rw, err := srv.listen.Accept()
 		if err != nil {
+			operr, ok := err.(*net.OpError)
+			if ok && operr.Err == net.ErrClosed {
+				return nil
+			}
 			return err
 		}
 		if tcpConn, ok := rw.(*net.TCPConn); ok {
@@ -145,7 +149,7 @@ func (srv *ServerTCP) invoke(conn *conn, req *Message) {
 	ctx := context.TODO()
 	var cancel context.CancelFunc
 	if srv.conf.InvokeTimeout > 0 {
-		ctx, cancel = context.WithTimeout(ctx, time.Duration(srv.conf.InvokeTimeout)*time.Millisecond)
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(srv.conf.InvokeTimeout))
 		defer cancel()
 	}
 

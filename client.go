@@ -11,10 +11,6 @@ import (
 	"time"
 )
 
-const (
-	defaultRequestTimeout = time.Second * 5
-)
-
 type ClientOption func(client *Client)
 
 func WithClientOptionHosts(hosts ...string) ClientOption {
@@ -94,39 +90,42 @@ func (client *Client) call(ctx context.Context, host, contentType, method string
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(client.conf.RequestTimeout))
 	defer cancel()
 
-	conn, err := client.getConn(host)
+	rw, err := client.getConn(host)
 	if err != nil {
 		return nil, err
 	}
 	req := getMessage()
+	reqId := generator.NextRequestId()
 	req.Type = MessageType_Data
 	req.ContentType = defaultContentType
-	req.Data.RequestId = generator.NextRequestId()
+	req.Data.RequestId = reqId
 	req.Data.Obj = client.name
 	req.Data.Method = method
 	req.Data.Meta = meta
 	req.Data.Body = input
-	if err := conn.sendMessage(req); err != nil {
+	if err := rw.sendMessage(req); err != nil {
 		return nil, err
 	}
+	putMessage(req)
 
 	var (
 		respChan = make(chan *Message, 1)
 		resp     *Message
 		ok       bool
 	)
-	client.reqCh.Store(req.Data.RequestId, respChan)
-	defer client.reqCh.Delete(req.Data.RequestId)
+	client.reqCh.Store(reqId, respChan)
+	defer client.reqCh.Delete(reqId)
 
 	select {
 	case <-ctx.Done():
 	case resp, ok = <-respChan:
 		if ok {
-			if resp.Data.Code == 0 {
-				return resp.Data.Body, nil
-			} else {
-				return resp.Data.Body, errors.New("", resp.Data.Desc, resp.Data.Code)
+			out = resp.Data.Body
+			if resp.Data.Code != 0 {
+				err = errors.New("", resp.Data.Desc, resp.Data.Code)
 			}
+			putMessage(resp)
+			return out, err
 		}
 	}
 

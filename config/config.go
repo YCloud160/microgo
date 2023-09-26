@@ -17,6 +17,7 @@ var (
 type Config struct {
 	Service    string          `yaml:"service"`
 	AppListen  string          `yaml:"app-listen"`
+	LocalIP    string          `yaml:"local-ip"`
 	KeepAlive  int             `yaml:"keep-alive"`
 	LogLevel   string          `yaml:"log-level"`
 	LogPath    string          `yaml:"log-path"`
