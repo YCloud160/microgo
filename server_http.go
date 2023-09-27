@@ -2,6 +2,7 @@ package microgo
 
 import (
 	"context"
+	"fmt"
 	"github.com/YCloud160/microgo/config"
 	"github.com/YCloud160/microgo/utils/xlog"
 	"go.uber.org/zap"
@@ -48,6 +49,11 @@ func (srv *ServerHTTP) Stop() error {
 
 func (srv *ServerHTTP) Name() string {
 	return srv.name
+}
+
+func (srv *ServerHTTP) Addr() string {
+	conf := config.GetConfig()
+	return fmt.Sprintf("%s:%s", conf.LocalIP, srv.conf.Port)
 }
 
 func (srv *ServerHTTP) ServeHTTP(rw http.ResponseWriter, req *http.Request) {

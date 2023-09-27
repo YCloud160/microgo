@@ -2,6 +2,7 @@ package microgo
 
 import (
 	"context"
+	"fmt"
 	"github.com/YCloud160/microgo/config"
 	ierrors "github.com/YCloud160/microgo/errors"
 	"github.com/YCloud160/microgo/meta"
@@ -28,6 +29,8 @@ type ServerTCP struct {
 	conns  map[*conn]struct{}
 
 	tick chan struct{}
+
+	isClosed bool
 
 	impl any
 	call Call
@@ -60,6 +63,11 @@ func (srv *ServerTCP) Start() error {
 func (srv *ServerTCP) Stop() error {
 	var removeConn []*conn
 	srv.mu.Lock()
+	if srv.isClosed {
+		srv.mu.Unlock()
+		return nil
+	}
+	srv.isClosed = true
 	srv.listen.Close()
 	for conn := range srv.conns {
 		delete(srv.conns, conn)
@@ -73,6 +81,11 @@ func (srv *ServerTCP) Stop() error {
 
 func (srv *ServerTCP) Name() string {
 	return srv.name
+}
+
+func (srv *ServerTCP) Addr() string {
+	conf := config.GetConfig()
+	return fmt.Sprintf("%s:%s", conf.LocalIP, srv.conf.Port)
 }
 
 func (srv *ServerTCP) accept() error {

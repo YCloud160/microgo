@@ -37,6 +37,14 @@ func initAdminF() {
 
 func stopApplication(writer http.ResponseWriter, request *http.Request) {
 	isClosed.Store(true)
+	if registry != nil {
+		for _, srv := range serverMap {
+			registry.UnRegister(srv.Name(), srv.Addr())
+			xlog.Info(context.TODO(), "unregister server", zap.String("server", srv.Name()))
+		}
+	}
+
+	time.Sleep(time.Second * 15)
 	stopCh <- struct{}{}
 	<-stopCh
 	writer.Write([]byte("stop service success"))

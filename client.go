@@ -53,7 +53,19 @@ func NewClient(name string, options ...ClientOption) *Client {
 		option(client)
 	}
 
+	if discovery != nil {
+		hosts, err := discovery.QueryRoute(name)
+		if err == nil && len(hosts) > 0 {
+			WithClientOptionHosts(hosts...)(client)
+		}
+		go client.updateNode()
+	}
+
 	return client
+}
+
+func (client *Client) updateNode() {
+
 }
 
 func (client *Client) handle(msg *Message) {
@@ -90,10 +102,6 @@ func (client *Client) call(ctx context.Context, host, contentType, method string
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(client.conf.RequestTimeout))
 	defer cancel()
 
-	rw, err := client.getConn(host)
-	if err != nil {
-		return nil, err
-	}
 	req := getMessage()
 	reqId := generator.NextRequestId()
 	req.Type = MessageType_Data
@@ -103,18 +111,26 @@ func (client *Client) call(ctx context.Context, host, contentType, method string
 	req.Data.Method = method
 	req.Data.Meta = meta
 	req.Data.Body = input
+
+	var respChan = make(chan *Message, 1)
+
+	rw, err := client.getConn(host)
+	if err != nil {
+		return nil, err
+	}
+
+	client.reqCh.Store(reqId, respChan)
+	defer client.reqCh.Delete(reqId)
+
 	if err := rw.sendMessage(req); err != nil {
 		return nil, err
 	}
 	putMessage(req)
 
 	var (
-		respChan = make(chan *Message, 1)
-		resp     *Message
-		ok       bool
+		resp *Message
+		ok   bool
 	)
-	client.reqCh.Store(reqId, respChan)
-	defer client.reqCh.Delete(reqId)
 
 	select {
 	case <-ctx.Done():
@@ -146,7 +162,7 @@ func (client *Client) getConn(host string) (*conn, error) {
 	if len(host) > 0 {
 		return client.getTargetConn(host)
 	}
-	return client.getRandConn()
+	return client.getRingConn()
 }
 
 func (client *Client) getTargetConn(host string) (*conn, error) {
@@ -168,8 +184,12 @@ func (client *Client) getTargetConn(host string) (*conn, error) {
 	return nil, ErrNotFoundConnection
 }
 
-func (client *Client) getRandConn() (*conn, error) {
+func (client *Client) getRingConn() (*conn, error) {
 	client.mu.Lock()
+
+	if len(client.hosts) == 0 {
+		return nil, ErrNotFoundConnection
+	}
 
 	if client.idx >= len(client.hosts) {
 		client.idx = 0

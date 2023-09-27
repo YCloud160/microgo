@@ -1,8 +1,12 @@
 service: demo
 app-listen: :51675
+local-ip: 127.0.0.1
+registry:
+  name: micro-route
+  data:
+    host: 127.0.0.1:6971
 server:
   - name: demo.rpcServer
-    ip: 127.0.0.1
     port: 8080
 client:
   request-timeout: 3000

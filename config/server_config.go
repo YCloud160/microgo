@@ -8,7 +8,6 @@ const (
 
 type ServerConfig struct {
 	Name          string `yaml:"name"`
-	IP            string `yaml:"ip"`
 	Port          string `yaml:"port"`
 	InvokeTimeout int64  `yaml:"invoke-timeout"`
 	MaxInvoke     int64  `yaml:"max-invoke"`

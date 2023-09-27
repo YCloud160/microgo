@@ -22,6 +22,11 @@ var (
 func init() {
 	conf := config.GetConfig()
 	xlog.InitXlog(conf)
+
+	if conf.Registry != nil {
+		initRegistry(conf.Registry)
+		initDiscovery(conf.Registry)
+	}
 }
 
 func RegisterServer(servers ...Server) {
@@ -43,6 +48,13 @@ func Run() error {
 	}
 	startWaitGroup.Wait()
 
+	if registry != nil {
+		for _, srv := range serverMap {
+			registry.Register(srv.Name(), srv.Addr())
+			xlog.Info(context.TODO(), "register server", zap.String("server", srv.Name()))
+		}
+	}
+
 	return loop()
 }
 
@@ -52,8 +64,11 @@ func loop() error {
 	for {
 		select {
 		case <-tick.C:
-			for _, srv := range serverMap {
-				xlog.Info(context.TODO(), "keepAlive", zap.String("server", srv.Name()))
+			if isClosed.Load() == false && registry != nil {
+				for _, srv := range serverMap {
+					registry.KeepAlive(srv.Name(), srv.Addr())
+					xlog.Info(context.TODO(), "keepAlive", zap.String("server", srv.Name()))
+				}
 			}
 		case <-stopCh:
 			for _, srv := range serverMap {

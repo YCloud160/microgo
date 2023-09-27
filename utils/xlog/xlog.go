@@ -40,6 +40,7 @@ func InitXlog(conf *config.Config) {
 	encodeConf.EncodeTime = func(t time.Time, encoder zapcore.PrimitiveArrayEncoder) {
 		encoder.AppendString(t.Format("2006-01-02 15:04:05.000"))
 	}
+
 	encoder := zapcore.NewJSONEncoder(encodeConf)
 	level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
 	core := zapcore.NewCore(encoder, output, level)

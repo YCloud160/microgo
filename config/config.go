@@ -21,8 +21,14 @@ type Config struct {
 	KeepAlive  int             `yaml:"keep-alive"`
 	LogLevel   string          `yaml:"log-level"`
 	LogPath    string          `yaml:"log-path"`
+	Registry   *Registry       `json:"registry"`
 	ServerConf []*ServerConfig `yaml:"server"`
 	ClientConf *ClientConfig   `yaml:"client"`
+}
+
+type Registry struct {
+	Name string            `json:"name"`
+	Data map[string]string `json:"data"`
 }
 
 func init() {
