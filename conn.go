@@ -158,6 +158,10 @@ func newClientConnPool(client *Client, addr string, size int) *clientConnPool {
 	return p
 }
 
+func (p *clientConnPool) close() {
+
+}
+
 const tryGetConnTimes = 3
 
 func (p *clientConnPool) getConn() (*conn, error) {

@@ -7,6 +7,8 @@ import (
 	"github.com/YCloud160/microgo/internal/generator"
 	"github.com/YCloud160/microgo/meta"
 	"github.com/YCloud160/microgo/utils/header"
+	"github.com/YCloud160/microgo/utils/xlog"
+	"go.uber.org/zap"
 	"sync"
 	"time"
 )
@@ -55,6 +57,7 @@ func NewClient(name string, options ...ClientOption) *Client {
 
 	if discovery != nil {
 		hosts, err := discovery.QueryRoute(name)
+		xlog.Info(context.TODO(), "节点", zap.Strings("hosts", hosts))
 		if err == nil && len(hosts) > 0 {
 			WithClientOptionHosts(hosts...)(client)
 		}
@@ -65,7 +68,69 @@ func NewClient(name string, options ...ClientOption) *Client {
 }
 
 func (client *Client) updateNode() {
+	tick := time.NewTicker(time.Second * time.Duration(client.conf.RefreshEndpointInterval))
+	for {
+		select {
+		case <-tick.C:
+			client._updateNode()
+		}
+	}
+}
 
+func (client *Client) _updateNode() {
+	defer xlog.Recover(context.TODO())
+
+	hosts, err := discovery.QueryRoute(client.name)
+	if err != nil {
+		return
+	}
+	var (
+		oldHost     = make(map[string]struct{})
+		delHost     = make(map[string]struct{})
+		addHost     = make(map[string]struct{})
+		newHost     = make(map[string]struct{})
+		newHostList []string
+	)
+	for _, h := range hosts {
+		newHost[h] = struct{}{}
+	}
+
+	client.mu.Lock()
+	for _, h := range client.hosts {
+		oldHost[h] = struct{}{}
+	}
+	client.mu.Unlock()
+
+	for h := range oldHost {
+		if _, ok := newHost[h]; !ok {
+			delHost[h] = struct{}{}
+		} else {
+			newHostList = append(newHostList, h)
+		}
+	}
+	for h := range newHost {
+		if _, ok := oldHost[h]; ok {
+			continue
+		}
+		addHost[h] = struct{}{}
+		newHostList = append(newHostList, h)
+	}
+
+	var delPool []*clientConnPool
+
+	client.mu.Lock()
+	client.hosts = newHostList
+	for h := range delHost {
+		if p, ok := client.pool[h]; ok {
+			delPool = append(delPool, p)
+			delete(client.pool, h)
+		}
+	}
+	client.mu.Unlock()
+
+	for _, p := range delPool {
+		p.close()
+	}
 }
 
 func (client *Client) handle(msg *Message) {
@@ -195,6 +260,7 @@ func (client *Client) getRingConn() (*conn, error) {
 		client.idx = 0
 	}
 	host := client.hosts[client.idx]
+	client.idx++
 	client.mu.Unlock()
 
 	return client._getConn(host)
