@@ -17,8 +17,8 @@ const (
 	fmtPackage     = protogen.GoImportPath("fmt")
 )
 
-// GenerateTarsGoFile generates a _microgo.pb.go file containing microgo service definitions.
-func GenerateTarsGoFile(gen *protogen.Plugin, file *protogen.File) *protogen.GeneratedFile {
+// GenerateMicroGoFile generates a _microgo.pb.go file containing microgo service definitions.
+func GenerateMicroGoFile(gen *protogen.Plugin, file *protogen.File) *protogen.GeneratedFile {
 	if len(file.Services) == 0 {
 		return nil
 	}
@@ -36,9 +36,9 @@ func GenerateTarsGoFile(gen *protogen.Plugin, file *protogen.File) *protogen.Gen
 	g.P()
 	g.P("package ", file.GoPackageName)
 	g.P()
-	t := microgo{}
-	t.Init(g)
-	t.Generate(file)
+	mg := microgo{}
+	mg.Init(g)
+	mg.Generate(file)
 	return g
 }
 
@@ -55,19 +55,19 @@ func protocVersion(gen *protogen.Plugin) string {
 }
 
 // microgo is an implementation of the Go protocol buffer compiler's
-// plugin architecture.  It generates bindings for tars rpc support.
+// plugin architecture.  It generates bindings for tars rpc suppormg.
 type microgo struct {
 	gen *protogen.GeneratedFile
 }
 
 // Name returns the name of this plugin
-func (t *microgo) Name() string {
+func (mg *microgo) Name() string {
 	return "microgo"
 }
 
 // Init initializes the plugin.
-func (t *microgo) Init(gen *protogen.GeneratedFile) {
-	t.gen = gen
+func (mg *microgo) Init(gen *protogen.GeneratedFile) {
+	mg.gen = gen
 }
 
 // upperFirstLatter make the first charter of given string  upper class
@@ -92,84 +92,83 @@ func lowerFirstLatter(s string) string {
 }
 
 // GenerateImports generates the import declaration for this file.
-func (t *microgo) GenerateImports(file *protogen.File) {
-	t.gen.QualifiedGoIdent(microgoPackage.Ident("Encoder"))
-	t.gen.QualifiedGoIdent(protoPackage.Ident("Message"))
-	t.gen.QualifiedGoIdent(contextPackage.Ident("Context"))
-	t.gen.QualifiedGoIdent(fmtPackage.Ident("Errorf"))
+func (mg *microgo) GenerateImports(file *protogen.File) {
+	mg.gen.QualifiedGoIdent(microgoPackage.Ident("Encoder"))
+	mg.gen.QualifiedGoIdent(protoPackage.Ident("Message"))
+	mg.gen.QualifiedGoIdent(contextPackage.Ident("Context"))
+	mg.gen.QualifiedGoIdent(fmtPackage.Ident("Errorf"))
 }
 
 // P forwards to g.gen.P.
-func (t *microgo) P(args ...interface{}) { t.gen.P(args...) }
+func (mg *microgo) P(args ...interface{}) { mg.gen.P(args...) }
 
 // Generate generates code for the services in the given file.
-func (t *microgo) Generate(file *protogen.File) {
-	if len(file.Services) == 0 {
-		return
-	}
+func (mg *microgo) Generate(file *protogen.File) {
+	mg.GenerateImports(file)
 
-	t.GenerateImports(file)
+	mg.P()
+
 	for i, service := range file.Services {
-		t.generateService(file, service, i)
+		mg.generateService(file, service, i)
 	}
 }
 
 // generateService generates all the code for the named service
-func (t *microgo) generateService(file *protogen.File, service *protogen.Service, index int) {
-	t.generateServerInterface(service)
+func (mg *microgo) generateService(file *protogen.File, service *protogen.Service, index int) {
+	mg.generateServerInterface(service)
 
 	// generate the method
-	t.generateMethod(service)
+	mg.generateMethod(service)
 
-	t.generateClientCode(service)
+	mg.generateClientCode(service)
 }
 
-func (t *microgo) generateServerInterface(service *protogen.Service) {
+func (mg *microgo) generateServerInterface(service *protogen.Service) {
 	serviceName := upperFirstLatter(service.GoName)
 	// generate the server interface
-	t.P(fmt.Sprintf("type I%sServer interface{", serviceName))
+	mg.P(fmt.Sprintf("type I%sServer interface{", serviceName))
 	for _, method := range service.Methods {
-		t.P(fmt.Sprintf("%s (ctx context.Context, input *%s) (output *%s, err error)",
-			upperFirstLatter(method.GoName), t.gen.QualifiedGoIdent(method.Input.GoIdent), t.gen.QualifiedGoIdent(method.Output.GoIdent)))
+		mg.P(fmt.Sprintf("%s (ctx context.Context, input *%s) (output *%s, err error)",
+			upperFirstLatter(method.GoName), mg.gen.QualifiedGoIdent(method.Input.GoIdent), mg.gen.QualifiedGoIdent(method.Output.GoIdent)))
 	}
-	t.P("}")
-	t.P()
+	mg.P("}")
+	mg.P()
 
 	// generate the context interface
-	t.P(fmt.Sprintf("type Nop%sServerImpl struct{}", serviceName))
+	mg.P(fmt.Sprintf("type Nop%sServerImpl struct{}", serviceName))
 	for _, method := range service.Methods {
-		t.P(fmt.Sprintf(`func (*Nop%sServerImpl)%s (ctx context.Context, input *%s) (output *%s, err error) {
+		mg.P(fmt.Sprintf(`func (*Nop%sServerImpl)%s (ctx context.Context, input *%s) (output *%s, err error) {
 			return nil, fmt.Errorf("method %s not implement") 
 			}`,
-			serviceName, upperFirstLatter(method.GoName), t.gen.QualifiedGoIdent(method.Input.GoIdent), t.gen.QualifiedGoIdent(method.Output.GoIdent), upperFirstLatter(method.GoName)))
-		t.P()
+			serviceName, upperFirstLatter(method.GoName), mg.gen.QualifiedGoIdent(method.Input.GoIdent), mg.gen.QualifiedGoIdent(method.Output.GoIdent), upperFirstLatter(method.GoName)))
+		mg.P()
 	}
-	t.P()
+	mg.P()
 }
 
-func (t *microgo) generateClientCode(service *protogen.Service) {
+func (mg *microgo) generateClientCode(service *protogen.Service) {
 	serviceName := lowerFirstLatter(service.GoName)
 
-	t.P(fmt.Sprintf(`// %sClient implement
+	mg.P(fmt.Sprintf(`// %sClient implement
 		type %sClient struct {
 			client *microgo.Client
 		}
 	`, serviceName, serviceName))
 
-	t.P(fmt.Sprintf(`func New%sClient(name string, options ...microgo.ClientOption) *%sClient {
+	mg.P(fmt.Sprintf(`func New%sClient(name string, options ...microgo.ClientOption) *%sClient {
 		client := microgo.NewClient(name, options...)
 		return &%sClient{client: client}
 	}`, upperFirstLatter(serviceName), serviceName, serviceName))
-	t.P()
+	mg.P()
 
 	for _, method := range service.Methods {
-		t.generateClientMethod(serviceName, method)
-		t.P()
+		mg.generateClientMethod(serviceName, method)
+		mg.P()
 	}
 }
 
-func (t *microgo) generateClientMethod(serviceName string, method *protogen.Method) {
-	t.P(fmt.Sprintf(`func (client *%sClient) %s(ctx context.Context, req *%s) (*%s, error) {
+func (mg *microgo) generateClientMethod(serviceName string, method *protogen.Method) {
+	mg.P(fmt.Sprintf(`func (client *%sClient) %s(ctx context.Context, req *%s) (*%s, error) {
 			input, err := proto.Marshal(req)
 			if err != nil {
 				return nil, err
@@ -186,8 +185,8 @@ func (t *microgo) generateClientMethod(serviceName string, method *protogen.Meth
 		}`, serviceName, method.GoName, method.Input.GoIdent.GoName, method.Output.GoIdent.GoName, method.GoName, method.Output.GoIdent.GoName))
 }
 
-//func (t *microgo) generateClientBroadcastMethod(serviceName string, method *protogen.Method) {
-//	t.P(fmt.Sprintf(`func (client *%sClient) Broadcast%s(ctx context.Context, req *%s) (*%s, map[string]error) {
+//func (mg *microgo) generateClientBroadcastMethod(serviceName string, method *protogen.Method) {
+//	mg.P(fmt.Sprintf(`func (client *%sClient) Broadcast%s(ctx context.Context, req *%s) (*%s, map[string]error) {
 //			input, err := proto.Marshal(req)
 //			if err != nil {
 //				return nil, err
@@ -204,15 +203,15 @@ func (t *microgo) generateClientMethod(serviceName string, method *protogen.Meth
 //		}`, serviceName, method.GoName, method.Input.GoIdent.GoName, method.Output.GoIdent.GoName, method.GoName, method.Output.GoIdent.GoName))
 //}
 
-func (t *microgo) generateMethod(service *protogen.Service) {
+func (mg *microgo) generateMethod(service *protogen.Service) {
 	serviceName := upperFirstLatter(service.GoName)
-	t.P(fmt.Sprintf(`// %sCall is used to call the implement of the defined method.
+	mg.P(fmt.Sprintf(`// %sCall is used to call the implement of the defined method.
 	func %sCall(ctx context.Context, impl any, enc microgo.Encoder, method string, input []byte) (out []byte, err error) {
 		obj := impl.(I%sServer)
 		_ = obj
 		switch method {`, serviceName, serviceName, serviceName))
 	for _, method := range service.Methods {
-		t.P(fmt.Sprintf(`case "%s":
+		mg.P(fmt.Sprintf(`case "%s":
 			var req %s
 			if err = enc.Unmarshal(input, &req); err != nil {
 				return nil, err
@@ -224,12 +223,12 @@ func (t *microgo) generateMethod(service *protogen.Service) {
 			out, err = enc.Marshal(resp)
 			if err != nil {
 				return nil, err
-			}`, method.GoName, t.gen.QualifiedGoIdent(method.Input.GoIdent), upperFirstLatter(method.GoName)))
+			}`, method.GoName, mg.gen.QualifiedGoIdent(method.Input.GoIdent), upperFirstLatter(method.GoName)))
 	}
-	t.P("default:")
-	t.P("return nil, fmt.Errorf(\"method %s not implement\", method)")
-	t.P("}")
-	t.P("return out, nil")
-	t.P("}")
-	t.P()
+	mg.P("default:")
+	mg.P("return nil, fmt.Errorf(\"method %s not implement\", method)")
+	mg.P("}")
+	mg.P("return out, nil")
+	mg.P("}")
+	mg.P()
 }

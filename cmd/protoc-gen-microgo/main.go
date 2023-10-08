@@ -57,7 +57,8 @@ func main() {
 			if !f.Generate {
 				continue
 			}
-			GenerateTarsGoFile(gen, f)
+			GenerateMicroGoFile(gen, f)
+			GenerateAcmGoFile(gen, f)
 		}
 		return nil
 	})
