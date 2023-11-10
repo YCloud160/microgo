@@ -15,7 +15,11 @@ const (
 
 // GenerateAcmGoFile generates a _acmgo.pb.go file containing acmgo service definitions.
 func GenerateAcmGoFile(gen *protogen.Plugin, file *protogen.File) *protogen.GeneratedFile {
-	if !strings.HasSuffix(file.GeneratedFilenamePrefix, "acm.int") && !strings.HasSuffix(file.GeneratedFilenamePrefix, "acm.ext") {
+	//if !strings.HasSuffix(file.GeneratedFilenamePrefix, "acm.int") && !strings.HasSuffix(file.GeneratedFilenamePrefix, "acm.ext") {
+	//	return nil
+	//}
+	isGenerate := checkGenerateAcm(file)
+	if isGenerate == false {
 		return nil
 	}
 	filename := file.GeneratedFilenamePrefix + "_acmgo.pb.go"
@@ -70,6 +74,15 @@ func (t *acmgo) Generate(file *protogen.File) {
 	t.generateAcm(file)
 }
 
+func checkGenerateAcm(file *protogen.File) bool {
+	for _, message := range file.Proto.MessageType {
+		if len(message.ReservedName) == 4 && message.ReservedName[0] == "acm" {
+			return true
+		}
+	}
+	return false
+}
+
 // generateAcm
 func (t *acmgo) generateAcm(file *protogen.File) {
 	i := strings.LastIndex(file.GeneratedFilenamePrefix, ".")
@@ -86,7 +99,8 @@ func (t *acmgo) generateAcm(file *protogen.File) {
 			name := *message.Name
 			dataId := message.ReservedName[2]
 			dataIdKey := name + "Key"
-			datas = append(datas, dataIdKey, dataId, message.ReservedName[3])
+			dataName := message.ReservedName[3]
+			datas = append(datas, dataIdKey, dataId, dataName)
 			srvs := strings.Split(message.ReservedName[1], ",")
 			for _, srv := range srvs {
 				srv = upperFirstLatter(srv)
@@ -96,7 +110,7 @@ func (t *acmgo) generateAcm(file *protogen.File) {
 					servers[srv] = []string{name}
 				}
 			}
-			t.generateAcmData(name, dataIdKey)
+			t.generateAcmData(name, dataIdKey, dataName)
 		}
 	}
 	t.P()
@@ -126,9 +140,14 @@ func (t *acmgo) generateAcm(file *protogen.File) {
 	}
 }
 
-func (t *acmgo) generateAcmData(name, dataIdKey string) {
+func (t *acmgo) generateAcmData(name, dataIdKey, dataName string) {
 	t.P(fmt.Sprintf("func (*%s) DataId() string {", name))
 	t.P("return ", dataIdKey)
+	t.P("}")
+	t.P()
+
+	t.P(fmt.Sprintf("func (*%s) Name() string {", name))
+	t.P(fmt.Sprintf("return \"%s\"", dataName))
 	t.P("}")
 	t.P()
 

@@ -27,8 +27,8 @@ func InitXlog(conf *config.Config) {
 	}
 	writers := []zapcore.WriteSyncer{os.Stderr}
 	output := zapcore.NewMultiWriteSyncer(writers...)
-	if len(conf.LogPath) != 0 {
-		logFile := filepath.Join(conf.LogPath, service+".log")
+	if len(conf.LogDir) != 0 {
+		logFile := filepath.Join(conf.LogDir, service+".log")
 		output = zapcore.AddSync(&lumberjack.Logger{
 			Filename: logFile,
 			MaxSize:  500, // megabytes
@@ -99,7 +99,7 @@ func Recover(ctx context.Context) {
 }
 
 func withContext(ctx context.Context, fields ...zap.Field) []zap.Field {
-	data, ok := meta.FromOutContext(ctx)
+	data, ok := meta.FromOutRequestContext(ctx)
 	if !ok {
 		return fields
 	}

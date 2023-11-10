@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/YCloud160/microgo/config"
+	"github.com/YCloud160/microgo/meta"
 	"github.com/YCloud160/microgo/utils/xlog"
 	"go.uber.org/zap"
 	"net"
@@ -58,6 +59,9 @@ func (srv *ServerHTTP) Addr() string {
 
 func (srv *ServerHTTP) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	ctx := context.TODO()
+	ctxData := make(map[string]string)
+	ctx, ctxData = setTrace(ctx, ctxData, "http request")
+	ctx = meta.NewOutRequestContext(ctx, ctxData)
 	req = req.WithContext(ctx)
 
 	defer xlog.Recover(ctx)

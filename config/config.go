@@ -20,7 +20,8 @@ type Config struct {
 	LocalIP    string          `yaml:"local-ip"`
 	KeepAlive  int             `yaml:"keep-alive"`
 	LogLevel   string          `yaml:"log-level"`
-	LogPath    string          `yaml:"log-path"`
+	LogDir     string          `yaml:"log-dir"`
+	BaseDir    string          `yaml:"base-dir"`
 	Registry   *Registry       `json:"registry"`
 	ServerConf []*ServerConfig `yaml:"server"`
 	ClientConf *ClientConfig   `yaml:"client"`
@@ -44,6 +45,8 @@ func loadConfig() {
 	if err != nil {
 		panic(fmt.Sprintf("open config file failed, path:%s, error:%v", configFile, err))
 	}
+	defer file.Close()
+
 	conf := &Config{}
 	decode := yaml.NewDecoder(file)
 	if err := decode.Decode(conf); err != nil {
@@ -76,6 +79,13 @@ func GetConfig() *Config {
 		panic("config not init")
 	}
 	return _config
+}
+
+func GetBaseDir() string {
+	if _config == nil {
+		return ""
+	}
+	return _config.BaseDir
 }
 
 func GetServerConfig(name string) *ServerConfig {

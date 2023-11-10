@@ -147,7 +147,7 @@ func (mg *microgo) generateServerInterface(service *protogen.Service) {
 }
 
 func (mg *microgo) generateClientCode(service *protogen.Service) {
-	serviceName := lowerFirstLatter(service.GoName)
+	serviceName := upperFirstLatter(service.GoName)
 
 	mg.P(fmt.Sprintf(`// %sClient implement
 		type %sClient struct {
@@ -158,7 +158,7 @@ func (mg *microgo) generateClientCode(service *protogen.Service) {
 	mg.P(fmt.Sprintf(`func New%sClient(name string, options ...microgo.ClientOption) *%sClient {
 		client := microgo.NewClient(name, options...)
 		return &%sClient{client: client}
-	}`, upperFirstLatter(serviceName), serviceName, serviceName))
+	}`, serviceName, serviceName, serviceName))
 	mg.P()
 
 	for _, method := range service.Methods {

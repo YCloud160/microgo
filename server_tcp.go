@@ -190,7 +190,7 @@ func (srv *ServerTCP) invoke(conn *conn, req *Message) {
 	}
 	ctxData[header.RemoteIP] = conn.ip
 	ctx, ctxData = setTrace(ctx, ctxData, req.Data.Method)
-	ctx = meta.NewOutContext(ctx, ctxData)
+	ctx = meta.NewOutRequestContext(ctx, ctxData)
 	contentType := ctxData[header.ContentType]
 	enc := GetEncoder(contentType)
 
