@@ -159,7 +159,9 @@ func newClientConnPool(client *Client, addr string, size int) *clientConnPool {
 }
 
 func (p *clientConnPool) close() {
-
+	for _, conn := range p.idleConns {
+		conn.Close()
+	}
 }
 
 const tryGetConnTimes = 3
@@ -180,28 +182,44 @@ func (p *clientConnPool) getConn() (*conn, error) {
 
 func (p *clientConnPool) tryGetConn() (*conn, error) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 
-	if len(p.idleConns) >= p.poolSize {
-		if p.index >= p.poolSize {
+	connLen := len(p.idleConns)
+	if connLen > 0 {
+		if p.index >= p.poolSize || p.index >= connLen {
 			p.index = 0
 		}
-		for {
-			c := p.idleConns[p.index]
-			p.index++
-			return c, nil
+		c := p.idleConns[p.index]
+		p.index++
+		if connLen < p.poolSize {
+			go p.tryNewConn()
 		}
+		p.mu.Unlock()
+		return c, nil
 	}
+	c, err := p.newConnLocked()
+	p.mu.Unlock()
+	return c, err
+}
 
+func (p *clientConnPool) newConnLocked() (*conn, error) {
+	if len(p.idleConns) > 0 && len(p.idleConns) >= p.poolSize {
+		return p.idleConns[0], nil
+	}
 	rw, err := p.dial(p.addr)
 	if err != nil {
 		return nil, err
 	}
 	c := newConn(rw)
-	p.index++
 	p.idleConns = append(p.idleConns, c)
 	go p.readMessage(c)
 	return c, nil
+}
+
+func (p *clientConnPool) tryNewConn() {
+	defer xlog.Recover(context.TODO())
+	p.mu.Lock()
+	p.newConnLocked()
+	p.mu.Unlock()
 }
 
 func (p *clientConnPool) readMessage(c *conn) {

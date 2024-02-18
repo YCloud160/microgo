@@ -46,14 +46,15 @@ func main() {
 		//plugins     = flag.String("plugins", "", "list of plugins to enable (supported values: grpc)")
 		showVersion = flag.Bool("version", false, "print the version and exit")
 	)
-	flag.Parse()
 	if *showVersion {
 		fmt.Printf("protoc-gen-go-microgo %v\n", version)
 		return
 	}
 
 	protogen.Options{
-		ParamFunc: flags.Set,
+		ParamFunc: func(name, value string) error {
+			return flags.Set(name, value)
+		},
 	}.Run(func(gen *protogen.Plugin) error {
 		microgo := true
 		acmgo := true

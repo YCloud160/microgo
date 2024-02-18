@@ -141,12 +141,12 @@ func (t *acmgo) generateAcm(file *protogen.File) {
 }
 
 func (t *acmgo) generateAcmData(name, dataIdKey, dataName string) {
-	t.P(fmt.Sprintf("func (*%s) DataId() string {", name))
+	t.P(fmt.Sprintf("func (*%s) AcmDataId() string {", name))
 	t.P("return ", dataIdKey)
 	t.P("}")
 	t.P()
 
-	t.P(fmt.Sprintf("func (*%s) Name() string {", name))
+	t.P(fmt.Sprintf("func (*%s) AcmName() string {", name))
 	t.P(fmt.Sprintf("return \"%s\"", dataName))
 	t.P("}")
 	t.P()

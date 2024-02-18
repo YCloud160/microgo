@@ -19,11 +19,11 @@ func FromOutRequestContext(ctx context.Context) (map[string]string, bool) {
 	return map[string]string{}, false
 }
 
-func FromOutContext(ctx context.Context) (map[string]string, bool) {
+func FromOutContext(ctx context.Context) map[string]string {
 	val := ctx.Value(metaKey{})
 	meta, ok := val.(map[string]string)
 	if ok {
-		return meta, true
+		return meta
 	}
-	return map[string]string{}, false
+	return map[string]string{}
 }

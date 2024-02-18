@@ -6,6 +6,7 @@ import (
 	"github.com/YCloud160/microgo/config"
 	"github.com/YCloud160/microgo/meta"
 	"github.com/YCloud160/microgo/utils/header"
+	"github.com/YCloud160/microgo/utils/tracer"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -99,6 +100,11 @@ func Recover(ctx context.Context) {
 }
 
 func withContext(ctx context.Context, fields ...zap.Field) []zap.Field {
+	trace, ok := tracer.OutTracer(ctx)
+	if ok && trace != nil {
+		fields = append(fields, zap.String("traceId", trace.TraceID()), zap.String("spanId", trace.SpanID()))
+	}
+	return fields
 	data, ok := meta.FromOutRequestContext(ctx)
 	if !ok {
 		return fields

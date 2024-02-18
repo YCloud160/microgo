@@ -7,6 +7,7 @@ import (
 	"github.com/YCloud160/microgo/internal/generator"
 	"github.com/YCloud160/microgo/meta"
 	"github.com/YCloud160/microgo/utils/header"
+	"github.com/YCloud160/microgo/utils/tracer"
 	"github.com/YCloud160/microgo/utils/xlog"
 	"go.uber.org/zap"
 	"sync"
@@ -68,6 +69,7 @@ func NewClient(name string, options ...ClientOption) *Client {
 }
 
 func (client *Client) updateNode() {
+	client._updateNode()
 	tick := time.NewTicker(time.Second * time.Duration(client.conf.RefreshEndpointInterval))
 	for {
 		select {
@@ -82,12 +84,12 @@ func (client *Client) _updateNode() {
 
 	hosts, err := discovery.QueryRoute(client.name)
 	if err != nil {
+		//xlog.Error(ctx, "更新节点失败", zap.Error(err))
 		return
 	}
 	var (
 		oldHost     = make(map[string]struct{})
 		delHost     = make(map[string]struct{})
-		addHost     = make(map[string]struct{})
 		newHost     = make(map[string]struct{})
 		newHostList []string
 	)
@@ -99,7 +101,6 @@ func (client *Client) _updateNode() {
 	for _, h := range client.hosts {
 		oldHost[h] = struct{}{}
 	}
-	client.mu.Unlock()
 
 	for h := range oldHost {
 		if _, ok := newHost[h]; !ok {
@@ -112,13 +113,11 @@ func (client *Client) _updateNode() {
 		if _, ok := oldHost[h]; ok {
 			continue
 		}
-		addHost[h] = struct{}{}
 		newHostList = append(newHostList, h)
 	}
 
 	var delPool []*clientConnPool
 
-	client.mu.Lock()
 	client.hosts = newHostList
 	for h := range delHost {
 		if p, ok := client.pool[h]; ok {
@@ -161,8 +160,12 @@ func (client *Client) BroadcastCall(ctx context.Context, contentType, method str
 }
 
 func (client *Client) call(ctx context.Context, host, contentType, method string, input []byte) (out []byte, err error) {
-	meta, _ := meta.FromOutContext(ctx)
+	trace, _ := tracer.OutTracer(ctx)
+	meta := meta.FromOutContext(ctx)
 	meta[header.ContentType] = contentType
+	if trace != nil {
+		meta[header.Tracer] = trace.String()
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(client.conf.RequestTimeout))
 	defer cancel()
@@ -250,12 +253,11 @@ func (client *Client) getTargetConn(host string) (*conn, error) {
 }
 
 func (client *Client) getRingConn() (*conn, error) {
-	client.mu.Lock()
-
 	if len(client.hosts) == 0 {
 		return nil, ErrNotFoundConnection
 	}
 
+	client.mu.Lock()
 	if client.idx >= len(client.hosts) {
 		client.idx = 0
 	}

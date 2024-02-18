@@ -59,6 +59,12 @@ func (t *Tracer) String() string {
 	return string(bs)
 }
 
+func OutTracer(ctx context.Context) (*Tracer, bool) {
+	val := ctx.Value(_tracerKey)
+	trace, ok := val.(*Tracer)
+	return trace, ok
+}
+
 func WithTracer(ctx context.Context, trace *Tracer, name string) context.Context {
 	trace.Span = NewSpan(trace.Span, name)
 	trace.spanId = trace.Span.SpanID()

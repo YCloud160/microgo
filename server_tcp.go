@@ -125,7 +125,7 @@ func (srv *ServerTCP) handle(c *conn) {
 		switch msg.Type {
 		case MessageType_Ping:
 		case MessageType_Data:
-			srv.invoke(c, msg)
+			go srv.invoke(c, msg)
 		default:
 			xlog.Error(context.TODO(), "error message type", zap.Any("data type", msg.Type))
 			return
@@ -168,17 +168,18 @@ func (srv *ServerTCP) invoke(conn *conn, req *Message) {
 
 	resp := getMessage()
 	resp.Type = MessageType_Data
-	resp.ContentType = defaultContentType
+	resp.ContentType = req.ContentType
 	resp.Data.RequestId = req.Data.RequestId
 
 	select {
+	case srv.tick <- struct{}{}:
 	case <-ctx.Done():
 		resp.Data.Code = 9999
 		resp.Data.Desc = "request timeout"
 		conn.sendMessage(resp)
 		putMessage(resp)
+		putMessage(req)
 		return
-	case srv.tick <- struct{}{}:
 	}
 	defer func() {
 		<-srv.tick
@@ -188,7 +189,6 @@ func (srv *ServerTCP) invoke(conn *conn, req *Message) {
 	if ctxData == nil {
 		ctxData = make(map[string]string)
 	}
-	ctxData[header.RemoteIP] = conn.ip
 	ctx, ctxData = setTrace(ctx, ctxData, req.Data.Method)
 	ctx = meta.NewOutRequestContext(ctx, ctxData)
 	contentType := ctxData[header.ContentType]

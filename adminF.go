@@ -2,7 +2,6 @@ package microgo
 
 import (
 	"context"
-	"github.com/YCloud160/microgo/config"
 	"github.com/YCloud160/microgo/utils/xlog"
 	"go.uber.org/zap"
 	"net"
@@ -16,10 +15,10 @@ func initAdminF() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/microgo/stop", stopApplication)
 	addr := ":0"
-	conf := config.GetConfig()
-	if len(conf.AppListen) > 0 {
-		addr = conf.AppListen
-	}
+	//conf := config.GetConfig()
+	//if len(conf.AppListen) > 0 {
+	//	addr = conf.AppListen
+	//}
 	listen, err := net.Listen("tcp", addr)
 	if err != nil {
 		panic(err)

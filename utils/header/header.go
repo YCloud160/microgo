@@ -2,8 +2,10 @@ package header
 
 const (
 	ContentType = "content-type"
-	RemoteIP    = "remote-ip"
+	ClientIP    = "client-ip"
 	Tracer      = "tracer"
 	TraceID     = "trace-id"
 	SpanID      = "span-id"
+	Token       = "token"
+	UID         = "uid"
 )
