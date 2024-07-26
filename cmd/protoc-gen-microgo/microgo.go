@@ -128,22 +128,22 @@ func (mg *microgo) generateServerInterface(service *protogen.Service) {
 	// generate the server interface
 	mg.P(fmt.Sprintf("type I%sServer interface{", serviceName))
 	for _, method := range service.Methods {
-		mg.P(fmt.Sprintf("%s (ctx context.Context, input *%s) (output *%s, err error)",
+		mg.P(fmt.Sprintf("%s (context.Context, *%s) (*%s, error)",
 			upperFirstLatter(method.GoName), mg.gen.QualifiedGoIdent(method.Input.GoIdent), mg.gen.QualifiedGoIdent(method.Output.GoIdent)))
 	}
 	mg.P("}")
 	mg.P()
 
 	// generate the context interface
-	mg.P(fmt.Sprintf("type Nop%sServerImpl struct{}", serviceName))
-	for _, method := range service.Methods {
-		mg.P(fmt.Sprintf(`func (*Nop%sServerImpl)%s (ctx context.Context, input *%s) (output *%s, err error) {
-			return nil, fmt.Errorf("method %s not implement") 
-			}`,
-			serviceName, upperFirstLatter(method.GoName), mg.gen.QualifiedGoIdent(method.Input.GoIdent), mg.gen.QualifiedGoIdent(method.Output.GoIdent), upperFirstLatter(method.GoName)))
-		mg.P()
-	}
-	mg.P()
+	//mg.P(fmt.Sprintf("type Nop%sServerImpl struct{}", serviceName))
+	//for _, method := range service.Methods {
+	//	mg.P(fmt.Sprintf(`func (*Nop%sServerImpl)%s (ctx context.Context, input *%s) (output *%s, err error) {
+	//		return nil, fmt.Errorf("method %s not implement")
+	//		}`,
+	//		serviceName, upperFirstLatter(method.GoName), mg.gen.QualifiedGoIdent(method.Input.GoIdent), mg.gen.QualifiedGoIdent(method.Output.GoIdent), upperFirstLatter(method.GoName)))
+	//	mg.P()
+	//}
+	//mg.P()
 }
 
 func (mg *microgo) generateClientCode(service *protogen.Service) {
@@ -163,17 +163,25 @@ func (mg *microgo) generateClientCode(service *protogen.Service) {
 
 	for _, method := range service.Methods {
 		mg.generateClientMethod(serviceName, method)
+		mg.generateClientMethodOri(serviceName, method)
+		mg.generateClientBroadcastMethod(serviceName, method)
 		mg.P()
 	}
 }
 
 func (mg *microgo) generateClientMethod(serviceName string, method *protogen.Method) {
 	mg.P(fmt.Sprintf(`func (client *%sClient) %s(ctx context.Context, req *%s) (*%s, error) {
+			return client.%sOri(ctx, req, "")
+		}`, serviceName, method.GoName, method.Input.GoIdent.GoName, method.Output.GoIdent.GoName, method.GoName))
+}
+
+func (mg *microgo) generateClientMethodOri(serviceName string, method *protogen.Method) {
+	mg.P(fmt.Sprintf(`func (client *%sClient) %sOri(ctx context.Context, req *%s, ipport string) (*%s, error) {
 			input, err := proto.Marshal(req)
 			if err != nil {
 				return nil, err
 			}
-			out, err := client.client.Call(ctx, "", "proto", "%s", input)
+			out, err := client.client.Call(ctx, ipport, "proto", "%s", input)
 			if err != nil {
 				return nil, err
 			}
@@ -185,29 +193,36 @@ func (mg *microgo) generateClientMethod(serviceName string, method *protogen.Met
 		}`, serviceName, method.GoName, method.Input.GoIdent.GoName, method.Output.GoIdent.GoName, method.GoName, method.Output.GoIdent.GoName))
 }
 
-//func (mg *microgo) generateClientBroadcastMethod(serviceName string, method *protogen.Method) {
-//	mg.P(fmt.Sprintf(`func (client *%sClient) Broadcast%s(ctx context.Context, req *%s) (*%s, map[string]error) {
-//			input, err := proto.Marshal(req)
-//			if err != nil {
-//				return nil, err
-//			}
-//			out, errs := client.client.BroadcastCall(ctx, "", "proto", "%s", input)
-//			if errs != nil {
-//				return nil, errs
-//			}
-//			resp := %s{}
-//			if err := proto.Unmarshal(out, &resp); err != nil {
-//				return nil, err
-//			}
-//			return &resp, nil
-//		}`, serviceName, method.GoName, method.Input.GoIdent.GoName, method.Output.GoIdent.GoName, method.GoName, method.Output.GoIdent.GoName))
-//}
+func (mg *microgo) generateClientBroadcastMethod(serviceName string, method *protogen.Method) {
+	mg.P(fmt.Sprintf(`func (client *%sClient) Broadcast%s(ctx context.Context, req *%s) (map[string]*%s, map[string]error) {
+			input, err := proto.Marshal(req)
+			if err != nil {
+				return nil, map[string]error{"localhost": err}
+			}
+			outs, errs := client.client.BroadcastCall(ctx, "proto", "%s", input)
+			respMap := make(map[string]*%s)
+			for ipport, out := range outs {
+				if out != nil {
+					resp := %s{}
+					if err := proto.Unmarshal(out, &resp); err != nil {
+						errs[ipport] = err
+					} else {
+						respMap[ipport] = &resp
+					}
+				}
+			}
+			return respMap, errs
+		}`, serviceName, method.GoName, method.Input.GoIdent.GoName, method.Output.GoIdent.GoName, method.GoName, method.Output.GoIdent.GoName, method.Output.GoIdent.GoName))
+}
 
 func (mg *microgo) generateMethod(service *protogen.Service) {
 	serviceName := upperFirstLatter(service.GoName)
 	mg.P(fmt.Sprintf(`// %sCall is used to call the implement of the defined method.
 	func %sCall(ctx context.Context, impl any, enc microgo.Encoder, method string, input []byte) (out []byte, err error) {
-		obj := impl.(I%sServer)
+		obj, ok := impl.(I%sServer)
+		if !ok {
+			return nil, fmt.Errorf("method %%s not implement", method)
+		}
 		_ = obj
 		switch method {`, serviceName, serviceName, serviceName))
 	for _, method := range service.Methods {

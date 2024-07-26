@@ -5,8 +5,11 @@ import (
 	"github.com/YCloud160/microgo/config"
 	"github.com/YCloud160/microgo/utils/xlog"
 	"go.uber.org/zap"
+	"os"
+	"os/signal"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -17,6 +20,8 @@ var (
 	stopCh    = make(chan struct{})
 
 	isClosed atomic.Bool
+
+	beforeClose = func() {}
 )
 
 func init() {
@@ -32,6 +37,12 @@ func init() {
 func RegisterServer(servers ...Server) {
 	for _, s := range servers {
 		serverMap[s.Name()] = s
+	}
+}
+
+func WithOption(opts ...Option) {
+	for _, opt := range opts {
+		opt()
 	}
 }
 
@@ -53,6 +64,9 @@ func Run() error {
 			registry.Register(srv.Name(), srv.Addr())
 			xlog.Info(context.TODO(), "register server", zap.String("server", srv.Name()))
 		}
+		if adminFAddr != "" {
+			registry.Register(adminFName, adminFAddr)
+		}
 	}
 
 	return loop()
@@ -61,23 +75,44 @@ func Run() error {
 func loop() error {
 	conf := config.GetConfig()
 	tick := time.NewTicker(time.Duration(conf.KeepAlive) * time.Millisecond)
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
 	for {
 		select {
+		case s := <-c:
+			switch s {
+			case syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT:
+				closeServer()
+				return nil
+			case syscall.SIGHUP:
+			default:
+				return nil
+			}
 		case <-tick.C:
 			if isClosed.Load() == false && registry != nil {
 				for _, srv := range serverMap {
 					registry.KeepAlive(srv.Name(), srv.Addr())
 					xlog.Info(context.TODO(), "keepAlive", zap.String("server", srv.Name()))
 				}
+				if adminFAddr != "" {
+					registry.KeepAlive(adminFName, adminFAddr)
+				}
 			}
 		case <-stopCh:
-			for _, srv := range serverMap {
-				srv.Stop()
-			}
-			xlog.Info(context.TODO(), "stop service success")
+			closeServer()
 			stopCh <- struct{}{}
 			<-stopCh
 			return nil
 		}
 	}
+}
+
+func closeServer() {
+	if beforeClose != nil {
+		beforeClose()
+	}
+	for _, srv := range serverMap {
+		srv.Stop()
+	}
+	xlog.Info(context.TODO(), "stop service success")
 }

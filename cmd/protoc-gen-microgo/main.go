@@ -78,6 +78,7 @@ func main() {
 			}
 			if microgo {
 				GenerateMicroGoFile(gen, f)
+				GenerateHttpRPCFile(gen, f)
 			}
 			if acmgo {
 				GenerateAcmGoFile(gen, f)

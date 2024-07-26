@@ -15,16 +15,17 @@ var (
 )
 
 type Config struct {
-	Service    string          `yaml:"service"`
-	AppListen  string          `yaml:"app-listen"`
-	LocalIP    string          `yaml:"local-ip"`
-	KeepAlive  int             `yaml:"keep-alive"`
-	LogLevel   string          `yaml:"log-level"`
-	LogDir     string          `yaml:"log-dir"`
-	BaseDir    string          `yaml:"base-dir"`
-	Registry   *Registry       `json:"registry"`
-	ServerConf []*ServerConfig `yaml:"server"`
-	ClientConf *ClientConfig   `yaml:"client"`
+	Service     string          `yaml:"service"`
+	AppListen   string          `yaml:"app-listen"`
+	LocalIP     string          `yaml:"local-ip"`
+	KeepAlive   int             `yaml:"keep-alive"`
+	LogLevel    string          `yaml:"log-level"`
+	LogDir      string          `yaml:"log-dir"`
+	BaseDir     string          `yaml:"base-dir"`
+	NodeDataDir string          `yaml:"node-data-dir"`
+	Registry    *Registry       `json:"registry"`
+	ServerConf  []*ServerConfig `yaml:"server"`
+	ClientConf  *ClientConfig   `yaml:"client"`
 }
 
 type Registry struct {

@@ -9,6 +9,8 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"net/http"
+	"os"
+	"strconv"
 )
 
 type RouteResp struct {
@@ -33,6 +35,7 @@ func (mr *MicroRegistry) Register(name string, addr string) error {
 	data := map[string]string{
 		"name": name,
 		"addr": addr,
+		"pid":  strconv.FormatInt(int64(os.Getpid()), 10),
 	}
 	url := fmt.Sprintf("http://%s/micro/route/register", mr.Host)
 	_, err := mr.request(url, data)
@@ -43,6 +46,7 @@ func (mr *MicroRegistry) UnRegister(name string, addr string) error {
 	data := map[string]string{
 		"name": name,
 		"addr": addr,
+		"pid":  strconv.FormatInt(int64(os.Getpid()), 10),
 	}
 	url := fmt.Sprintf("http://%s/micro/route/unregister", mr.Host)
 	_, err := mr.request(url, data)
@@ -53,6 +57,7 @@ func (mr *MicroRegistry) KeepAlive(name string, addr string) error {
 	data := map[string]string{
 		"name": name,
 		"addr": addr,
+		"pid":  strconv.FormatInt(int64(os.Getpid()), 10),
 	}
 	url := fmt.Sprintf("http://%s/micro/route/keepalive", mr.Host)
 	_, err := mr.request(url, data)

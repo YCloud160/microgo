@@ -1,6 +1,7 @@
 package microgo
 
 import (
+	"fmt"
 	"github.com/YCloud160/microgo/config"
 	discovery2 "github.com/YCloud160/microgo/internal/discovery"
 )
@@ -16,4 +17,11 @@ func initDiscovery(conf *config.Registry) {
 	case "micro-route":
 		discovery = discovery2.NewMicroDiscovery(conf.Data["host"])
 	}
+}
+
+func GetNodes(srvName string) ([]string, error) {
+	if discovery == nil {
+		return []string{}, fmt.Errorf("discovery not init")
+	}
+	return discovery.QueryRoute(srvName)
 }

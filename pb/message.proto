@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package pb;
+package micropb;
 
-option go_package="./pb";
+option go_package="./micropb";
 
 message Message {
   uint32 request_id = 1;

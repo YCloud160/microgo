@@ -146,7 +146,7 @@ func (client *Client) Call(ctx context.Context, host, contentType, method string
 }
 
 func (client *Client) BroadcastCall(ctx context.Context, contentType, method string, input []byte) (map[string][]byte, map[string]error) {
-	hosts := client.getActiveHosts()
+	hosts := client.GetActiveHosts()
 	var (
 		outs = make(map[string][]byte)
 		errs = make(map[string]error)
@@ -216,7 +216,7 @@ func (client *Client) call(ctx context.Context, host, contentType, method string
 	return nil, errors.New("", "request timeout", 9999)
 }
 
-func (client *Client) getActiveHosts() []string {
+func (client *Client) GetActiveHosts() []string {
 	var hosts []string
 	client.mu.Lock()
 	for host := range client.pool {

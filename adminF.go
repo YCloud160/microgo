@@ -9,7 +9,11 @@ import (
 	"time"
 )
 
-var adminFServer *http.Server
+var (
+	adminFServer *http.Server
+	adminFAddr   string
+	adminFName   = "adminF"
+)
 
 func initAdminF() {
 	mux := http.NewServeMux()
@@ -26,6 +30,7 @@ func initAdminF() {
 	adminFServer = &http.Server{
 		Handler: mux,
 	}
+	adminFAddr = listen.Addr().String()
 	go func() {
 		xlog.Info(context.TODO(), "adminF start", zap.Any("addr", listen.Addr()))
 		if err := adminFServer.Serve(listen); err != nil {
@@ -41,9 +46,12 @@ func stopApplication(writer http.ResponseWriter, request *http.Request) {
 			registry.UnRegister(srv.Name(), srv.Addr())
 			xlog.Info(context.TODO(), "unregister server", zap.String("server", srv.Name()))
 		}
+		if adminFAddr != "" {
+			registry.UnRegister(adminFName, adminFAddr)
+		}
 	}
 
-	time.Sleep(time.Second * 15)
+	time.Sleep(time.Second * 5)
 	stopCh <- struct{}{}
 	<-stopCh
 	writer.Write([]byte("stop service success"))

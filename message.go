@@ -1,7 +1,7 @@
 package microgo
 
 import (
-	"github.com/YCloud160/microgo/pb"
+	pb "github.com/YCloud160/microgo/pb"
 	"sync"
 )
 

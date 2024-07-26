@@ -8,4 +8,5 @@ const (
 	SpanID      = "span-id"
 	Token       = "token"
 	UID         = "uid"
+	Device      = "device"
 )
